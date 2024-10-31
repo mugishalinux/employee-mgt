@@ -1,0 +1,109 @@
+services:
+  app-db:
+    image: postgres:14.1-alpine
+    container_name: employee_db
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_DB}
+    networks:
+      - app_network
+    ports:
+      - 5432:5432
+    restart: always
+  zookeeper:
+    image: confluentinc/cp-zookeeper:5.2.1
+    hostname: zookeeper
+    container_name: zookeeper
+    ports:
+    - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000  
+  redis:
+    image: redis:5.0.4-alpine
+    ports:
+      - 6379:6379
+  broker:
+    image: confluentinc/cp-enterprise-kafka:5.2.1
+    hostname: broker
+    container_name: broker
+    depends_on:
+      - zookeeper
+    ports:
+      - "29092:29092"
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_METRIC_REPORTERS: io.confluent.metrics.reporter.ConfluentMetricsReporter
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: broker:29092
+      CONFLUENT_METRICS_REPORTER_ZOOKEEPER_CONNECT: zookeeper:2181
+      CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 1
+      CONFLUENT_METRICS_ENABLE: "true"
+      CONFLUENT_SUPPORT_CUSTOMER_ID: "anonymous"
+      KAFKA_GROUP_ID: ${KAFKA_GROUP_ID}
+      SEND_EMAIL_REQUEST_TOPIC: ${SEND_EMAIL_REQUEST_TOPIC}
+      
+  app_management:
+    container_name: app_mgt_api
+    build: "./management-service"
+    depends_on:
+      - postgres-db
+    networks:
+      - app_network
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_HOST: employee_db
+      DATABASE_PORT: ${DATABASE_PORT}
+      DATABASE_USER: ${DATABASE_USER}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      DATABASE_DB: ${DATABASE_DB}
+      KAFKA_BROKER_URL: broker
+      KAFKA_GROUP_ID: ${KAFKA_GROUP_ID}
+      JWT_SECRET: ${JWT_SECRET}
+      SEND_EMAIL_REQUEST_TOPIC: ${SEND_EMAIL_REQUEST_TOPIC}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      QUEUE_NAME: ${QUEUE_NAME}
+      QUEUE_RETRIES: ${QUEUE_RETRIES}
+      QUEUE_DELAY: ${QUEUE_DELAY}
+      QUEUE_MAX_REQUESTS: ${QUEUE_MAX_REQUESTS}
+      QUEUE_DURATION: ${QUEUE_DURATION}
+      QUEUE_CONCURRENCY: ${QUEUE_CONCURRENCY}
+    restart: always
+
+  app_notification:
+    container_name: ekent_api
+    build: "./notification-sender-service"
+    networks:
+      - app_network
+    ports:
+      - "6000:6000"
+    environment:
+      KAFKA_BROKER_URL: ${KAFKA_BROKER_URL}
+      KAFKA_GROUP_ID: ${KAFKA_GROUP_ID}
+      SEND_EMAIL_REQUEST_TOPIC: ${SEND_EMAIL_REQUEST_TOPIC}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+      QUEUE_NAME: ${QUEUE_NAME}
+      QUEUE_RETRIES: ${QUEUE_RETRIES}
+      QUEUE_DELAY: ${QUEUE_DELAY}
+      QUEUE_MAX_REQUESTS: ${QUEUE_MAX_REQUESTS}
+      QUEUE_DURATION: ${QUEUE_DURATION}
+      QUEUE_CONCURRENCY: ${QUEUE_CONCURRENCY}
+      SMTPEMAIL: ${SMTPEMAIL}
+      SMTPUSERNANE: ${SMTPUSERNANE}
+    restart: always
+
+networks:
+  app_network:
